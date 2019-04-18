@@ -52,6 +52,8 @@ class UclidEmitter extends SeqTransform with Emitter {
 
   private def serialize_unop(p: DoPrim, arg0: String): String = p.op match {
     case Neg => s"-$arg0"
+    case AsUInt => arg0
+    case AsSInt => arg0
     // TODO: fix big hack that assumes all 1-bit UInts are booleans
     case Not => if (get_width(p.tpe) == 1) s"!${arg0}" else s"~$arg0"
     case _ => throwInternalError(s"Illegal unary operator: ${p.op}")
@@ -88,6 +90,7 @@ class UclidEmitter extends SeqTransform with Emitter {
     case Geq => s"$arg0 >= $arg1"
     case Eq => s"$arg0 == $arg1"
     case Neq => s"$arg0 != $arg1"
+    case Mul => s"$arg0 * $arg1"
     case And =>
       // TODO: fix big hack that assumes all 1-bit UInts are booleans
       if (get_width(p.tpe) == 1)
@@ -119,6 +122,10 @@ class UclidEmitter extends SeqTransform with Emitter {
         case SIntType(_) if (extra_bits > 0) => s"bv_sign_extend(${extra_bits}, ${arg0})"
         case _ => s"${arg0}"
       }
+    }
+    case Tail => {
+      val remaining_bits = get_width(p.args(0).tpe) - p.consts(0)
+      s"${arg0}[${remaining_bits}:0]"
     }
     case _ => throwInternalError(s"Illegal binary operator: ${p.op}")
   }
@@ -167,7 +174,8 @@ class UclidEmitter extends SeqTransform with Emitter {
       case i: Int =>
         s"${ul.value}bv${i}"
     }
-    case _ => throwInternalError(s"Trying to emit unsupported expression")
+    case sl: SIntLiteral => s"${sl.value}bv${get_width(sl.width)}"
+    case _ => throwInternalError(s"Trying to emit unsupported expression: ${e.serialize}")
   }
 
   private def serialize_lhs_exp(e: Expression): String = e match {
