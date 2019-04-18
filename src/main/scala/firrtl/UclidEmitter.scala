@@ -90,7 +90,14 @@ class UclidEmitter extends SeqTransform with Emitter {
     case Geq => s"$arg0 >= $arg1"
     case Eq => s"$arg0 == $arg1"
     case Neq => s"$arg0 != $arg1"
-    case Mul => s"$arg0 * $arg1"
+    case Mul =>
+      val out_width = get_width(p.tpe)
+      val ext0 = out_width - get_width(p.args(0).tpe)
+      val ext1 = out_width - get_width(p.args(1).tpe)
+      p.tpe match {
+        case UIntType(_) => s"bv_zero_extend($ext0, ${arg0}) * bv_zero_extend($ext1, ${arg1})"
+        case SIntType(_) => s"bv_sign_extend($ext0, ${arg0}) * bv_sign_extend($ext1, ${arg1})"
+      }
     case And =>
       // TODO: fix big hack that assumes all 1-bit UInts are booleans
       if (get_width(p.tpe) == 1)
@@ -103,12 +110,30 @@ class UclidEmitter extends SeqTransform with Emitter {
         s"$arg0 || $arg1"
       else
         s"$arg0 | $arg1"
-    case Xor => s"$arg0 ^ $arg1"
+    case Xor =>
+      // TODO: fix big hack that assumes all 1-bit UInts are booleans
+      if(get_width(p.tpe) == 1) {
+        s"($arg0 && !$arg1) || (!$arg0 && $arg1)"
+      } else { s"$arg0 ^ $arg1" }
     case Bits => s"${arg0}[${arg1}]"
-    case Shl | Dshlw =>
+    case Shl =>
+      val shift = p.consts(0)
+      s"${arg0} ++ 0bv${shift}"
+    case Dshlw =>
       val shamt = serialize_shamt_exp(p, arg1)
       s"bv_left_shift(${shamt}, ${arg0})"
-    case Shr | Dshr =>
+    case Shr =>
+      val msb = get_width(p.args(0).tpe) - 1
+      val lsb = p.consts(0)
+      if(lsb > msb) {
+        p.tpe match {
+          case UIntType(_) => s"0bv1"
+          case SIntType(_) => s"${arg0}[${msb}:${msb}]"
+        }
+      } else {
+        s"${arg0}[${msb}:${lsb}]"
+      }
+    case Dshr =>
       val shamt = serialize_shamt_exp(p, arg1)
       p.tpe match {
         case UIntType(_) => s"bv_l_right_shift(${shamt}, ${arg0})"
@@ -125,13 +150,20 @@ class UclidEmitter extends SeqTransform with Emitter {
     }
     case Tail => {
       val remaining_bits = get_width(p.args(0).tpe) - p.consts(0)
-      s"${arg0}[${remaining_bits}:0]"
+      s"${arg0}[${remaining_bits-1}:0]"
     }
     case _ => throwInternalError(s"Illegal binary operator: ${p.op}")
   }
 
   private def serialize_ternop(p: DoPrim, arg0: String, arg1: String, arg2: String): String = p.op match {
-    case Bits => s"${arg0}[${arg1}:${arg2}]"
+    case Bits =>
+      val (msb,lsb) = (p.consts(0), p.consts(1))
+      if(msb == lsb) {
+        // convert to bool since we assume that all 1-bit signals are booleans
+        s"${arg0}[${arg1}:${arg2}] == 1bv1"
+      } else {
+        s"${arg0}[${arg1}:${arg2}]"
+      }
     case _ => throwInternalError(s"Illegal ternary operator: ${p.op}")
   }
 
@@ -149,6 +181,7 @@ class UclidEmitter extends SeqTransform with Emitter {
     val i = serialize_rhs_exp(m.cond)
     val t = serialize_rhs_exp(m.tval)
     val e = serialize_rhs_exp(m.fval)
+    assert(m.tval.tpe == m.fval.tpe)
     s"if ($i) then ($t) else ($e)"
   }
 
