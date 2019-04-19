@@ -1,0 +1,49 @@
+module GCD {
+  input reset : boolean;
+  input io_value1 : bv16;
+  input io_value2 : bv16;
+  input io_loadingValues : boolean;
+  output io_outputGCD : bv16;
+  output io_outputValid : boolean;
+  // Registers
+  var x : bv16;
+  var y : bv16;
+  // Memories
+  // Wires
+  // Nodes
+  var _T : boolean;
+  var _T_2 : bv16;
+  var _T_4 : bv16;
+  var _GEN_0 : bv16;
+  var _GEN_1 : bv16;
+  var x_next : bv16;
+  var y_next : bv16;
+  // Init
+  init {
+    _T = x > y;
+    _T_2 = x - y;
+    _T_4 = y - x;
+    _GEN_0 = if (_T) then (_T_2) else (x);
+    _GEN_1 = if (_T) then (y) else (_T_4);
+    x_next = if (io_loadingValues) then (io_value1) else (_GEN_0);
+    y_next = if (io_loadingValues) then (io_value2) else (_GEN_1);
+    io_outputGCD = x;
+    io_outputValid = y == 0bv16;
+  }
+  // Mem Writes
+  next {
+    // Clock High
+    x' = x_next;
+    y' = y_next;
+    // Clock Low
+    _T' = x' > y';
+    _T_2' = x' - y';
+    _T_4' = y' - x';
+    _GEN_0' = if (_T') then (_T_2') else (x');
+    _GEN_1' = if (_T') then (y') else (_T_4');
+    x_next' = if (io_loadingValues') then (io_value1') else (_GEN_0');
+    y_next' = if (io_loadingValues') then (io_value2') else (_GEN_1');
+    io_outputGCD' = x';
+    io_outputValid' = y' == 0bv16;
+  }
+}
