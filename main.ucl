@@ -1,0 +1,35 @@
+module main {
+
+	instance cord : IterativeCordic();
+
+	var in_fire : boolean;
+	assume(in_fire == (!cord.reset && cord.io_in_valid && cord.io_in_ready));
+	var out_fire : boolean;
+	assume(out_fire == (!cord.reset && cord.io_out_valid && cord.io_out_ready));
+
+	init {
+		assume(cord.reset == true);
+	}
+
+
+	next {
+		assume(cord.reset == false);
+		next(cord);
+	}
+
+
+
+
+	//property[LTL] eventually_ready: G(F(cord.io_in_ready));
+	invariant counter_rst : (in_fire ==> cord.counter == 0bv4);
+
+
+	control {
+		//v = bmc[eventually_ready](100);
+		//		v = horn;
+		v = unroll(10);
+		check;
+		print_results;
+		v.dump_cex_vcds;
+	}
+}
